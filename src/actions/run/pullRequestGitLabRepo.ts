@@ -1,19 +1,19 @@
-import {DefaultAzureDevOpsCredentialsProvider, ScmIntegrationRegistry} from "@backstage/integration";
+import {DefaultGitlabCredentialsProvider, ScmIntegrationRegistry} from "@backstage/integration";
 import { createTemplateAction } from "@backstage/plugin-scaffolder-backend";
 import {InputError} from "@backstage/errors";
-import { createADOPullRequest, updateADOPullRequest} from "../helpers";
-import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces";
+import { createGitLabMergeRequest, updateGitLabMergeRequest} from "../helpers";
+import { Gitlab } from "@gitbeaker/core";
 
 /**
- * Creates an `ado:repo:pr` Scaffolder action.
+ * Creates a`gitlab:repo:pr` Scaffolder action.
  *
  * @remarks
  *
- * This Scaffolder action will create a PR to a repository in Azure DevOps.
+ * This Scaffolder action will create a merge request to a repository in GitLab.
  *
  * @public
  */
-export const pullRequestAzureRepoAction = (options: {
+export const pullRequestGitLabRepoAction = (options: {
   integrations: ScmIntegrationRegistry;
 }) => {
   const { integrations } = options;
@@ -31,8 +31,8 @@ export const pullRequestAzureRepoAction = (options: {
     token?: string;
     autoComplete?: boolean;
   }>({
-    id: 'azure:repo:pr',
-    description: 'Create a PR to a repository in Azure DevOps.',
+    id: 'gitlab:repo:pr',
+    description: 'Create a merge request to a repository in Gitlab.',
     schema: {
       input: {
         type: 'object',
@@ -41,7 +41,7 @@ export const pullRequestAzureRepoAction = (options: {
           organization: {
             title: 'Organization Name',
             type: 'string',
-            description: 'The name of the organization in Azure DevOps.',
+            description: 'The name of the organization in Gitlab.',
           },
           sourceBranch: {
             title: 'Source Branch',
@@ -55,33 +55,33 @@ export const pullRequestAzureRepoAction = (options: {
           },
           title: {
             title: 'Title',
-            description: 'The title of the pull request.',
+            description: 'The title of the merge request.',
             type: 'string',
           },
           description: {
             title: 'Description',
-            description: 'The description of the pull request.',
+            description: 'The description of the merge request.',
             type: 'string'
           },
           repoId: {
             title: 'Remote Repo ID',
-            description: 'Repo ID of the pull request.',
+            description: 'Repo ID of the merge request.',
             type: 'string',
           },
           project: {
-            title: 'ADO Project',
-            description: 'The Project in Azure DevOps.',
+            title: 'Project',
+            description: 'The Project in Gitlab.',
             type: 'string',
           },
           supportsIterations: {
             title: 'Supports Iterations',
-            description: 'Whether or not the PR supports iterations.',
+            description: 'Whether or not the MR supports iterations.',
             type: 'boolean',
           },
           server: {
             type: "string",
             title: "Server hostname",
-            description: "The hostname of the Azure DevOps service. Defaults to dev.azure.com",
+            description: "The hostname of the Gitlab service. Defaults to gitlab.com",
           },
           token: {
             title: 'Authentication Token',
@@ -90,7 +90,7 @@ export const pullRequestAzureRepoAction = (options: {
           },
           autoComplete: {
             title: 'Enable auto-completion',
-            description: 'Enable auto-completion of the pull request once policies are met',
+            description: 'Enable auto-completion of the merge request once policies are met',
             type: 'boolean'
           }
         }
@@ -99,24 +99,23 @@ export const pullRequestAzureRepoAction = (options: {
         type: 'number',
         properties: {
           pullRequestId: {
-            title: 'The ID of the created pull request',
+            title: 'The ID of the created merge request',
             type: 'number'
           }
         }
       }
     },
     async handler(ctx) {
-      const { title, repoId, server, project, supportsIterations } = ctx.input;
+      const { title, server, project} = ctx.input;
 
       const sourceBranch = `refs/heads/${ctx.input.sourceBranch}` ?? `refs/heads/scaffolder`;
       const targetBranch = `refs/heads/${ctx.input.targetBranch}` ?? `refs/heads/main`;
 
-      const host = server ?? "dev.azure.com";
-      const provider = DefaultAzureDevOpsCredentialsProvider.fromIntegrations(integrations);
+      const host = server ?? "gitlab.com";
+      const provider = DefaultGitlabCredentialsProvider.fromIntegrations(integrations);
       const url = `https://${host}/${ctx.input.organization}`;
       const credentials = await provider.getCredentials({ url: url });
 
-      const org = ctx.input.organization ?? "not-empty";
       const token = ctx.input.token ?? credentials?.token;
 
       const description = ctx.input.description ?? "";
@@ -126,50 +125,37 @@ export const pullRequestAzureRepoAction = (options: {
         throw new InputError(`No token credentials provided for ${url}`);
       }
 
-      const pullRequest: GitInterfaces.GitPullRequest = {
-        sourceRefName: sourceBranch,
-        targetRefName: targetBranch,
-        title: title,
-        description: description
-      } as GitInterfaces.GitPullRequest;
-
-      const pullRequestResponse = await createADOPullRequest({
-        gitPullRequestToCreate: pullRequest,
-        server: host,
-        auth: {
-          org: org,
-          token: token,
-        },
-        repoId: repoId,
-        project: project,
-        supportsIterations: supportsIterations,
+      const gitlab = new Gitlab({
+        host,
+        token,
       });
 
-      // this can't be set at creation time, so we have to update the PR to set it
-      if (autoComplete) {
-        const updateProperties = {
-          autoCompleteSetBy: { id: pullRequestResponse.createdBy?.id},
-          // the idea here is that if you want to fire-and-forget the PR by setting autocomplete, you don't also want
-          // the branch to stick around afterwards.  
-          completionOptions: {
-            deleteSourceBranch: true
-          } as GitInterfaces.GitPullRequestCompletionOptions
-        } as GitInterfaces.GitPullRequest
+      const mergeRequest = {
+        source_branch: sourceBranch,
+        target_branch: targetBranch,
+        title: title,
+        description: description
+      };
 
-        await updateADOPullRequest({
-          gitPullRequestToUpdate: updateProperties,
-          server: host,
-          auth: {
-            org: org,
-            token: token,
-          },
-          repoId: repoId,
-          project: project,
-          pullRequestId: pullRequestResponse.pullRequestId!
+      const mergeRequestResponse = await createGitLabMergeRequest({
+        gitlab,
+        projectId: project!,
+        sourceBranch: sourceBranch,
+        targetBranch: targetBranch,
+        title: title,
+        description: description,
+      });
+
+      // this can't be set at creation time, so we have to update the MR to set it
+      if (autoComplete) {
+        await updateGitLabMergeRequest({
+          gitlab,
+          projectId: project!,
+          mergeRequestId: mergeRequestResponse.iid,
+          ...mergeRequest,
         });
       }
-
-      ctx.output("pullRequestId", pullRequestResponse.pullRequestId);
+      ctx.output("mergeRequestId", mergeRequestResponse.iid);
     },
   });
 };

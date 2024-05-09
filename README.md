@@ -1,12 +1,12 @@
-# scaffolder-backend-module-azure-repositories
+# scaffolder-backend-module-Gitlab-repositories
 
-Welcome to the Microsoft Azure repository actions for the `scaffolder-backend`.
+Welcome to the GitLab repository actions for the `scaffolder-backend`.
 
 This plugin contains a collection of actions:
 
-- `azure:repo:clone`
-- `azure:repo:push`
-- `azure:repo:pr`
+- `gitlab:repo:clone`
+- `gitlab:repo:push`
+- `gitlab:repo:pr`
 
 ## Getting started
 
@@ -24,7 +24,7 @@ You need to configure the actions in your backend:
 
 ```sh
 # From your Backstage root directory
-yarn add --cwd packages/backend @parfuemerie-douglas/scaffolder-backend-module-azure-repositories
+yarn add --cwd packages/backend @parfuemerie-douglas/scaffolder-backend-module-Gitlab-repositories
 ```
 
 Configure the actions (you can check the
@@ -34,67 +34,64 @@ to see all options):
 ```typescript
 // packages/backend/src/plugins/scaffolder.ts
 
-import { CatalogClient } from '@backstage/catalog-client';
-import { ScmIntegrations } from "@backstage/integration";
+import {CatalogClient} from '@backstage/catalog-client';
+import {ScmIntegrations} from "@backstage/integration";
 
 import {
-  cloneAzureRepoAction,
-  pushAzureRepoAction,
-  pullRequestAzureRepoAction,
-} from "@parfuemerie-douglas/scaffolder-backend-module-azure-repositories";
+    cloneGitlabRepoAction,
+    pushGitlabRepoAction,
+    pullRequestGitlabRepoAction,
+} from "@scaffolder-backend-module-azure-gitlab-repositories";
 
-import { Router } from 'express';
+import {Router} from 'express';
 
-import type { PluginEnvironment } from '../types';
+import type {PluginEnvironment} from '../types';
+import {cloneGitLabRepoAction} from "./cloneGitLabRepo";
 
 export default async function createPlugin(
-  env: PluginEnvironment,
+    env: PluginEnvironment,
 ): Promise<Router> {
-  const catalogClient = new CatalogClient({
-    discoveryApi: env.discovery,
-  });
+    const catalogClient = new CatalogClient({
+        discoveryApi: env.discovery,
+    });
 
-const integrations = ScmIntegrations.fromConfig(env.config);
+    const integrations = ScmIntegrations.fromConfig(env.config);
 
-const actions = [
-  cloneAzureRepoAction({ integrations }),
-  pushAzureRepoAction({ integrations, config: env.config }),
-  pullRequestAzureRepoAction({ integrations }),
-  ...createBuiltInActions({
-    containerRunner,
-    catalogClient,
-    integrations,
-    config: env.config,
-    reader: env.reader,
-  }),
-];
+    const actions = [
+        cloneGitLabRepoAction({integrations}),
+        pushGitLabRepoAction({integrations, config: env.config}),
+        pullRequestGitLabRepoAction({integrations}),
+        ...createBuiltInActions({
+            containerRunner,
+            catalogClient,
+            integrations,
+            config: env.config,
+            reader: env.reader,
+        }),
+    ];
 
-return await createRouter({
-  containerRunner,
-  catalogClient,
-  actions,
-  logger: env.logger,
-  config: env.config,
-  database: env.database,
-  reader: env.reader,
-});
+    return await createRouter({
+        containerRunner,
+        catalogClient,
+        actions,
+        logger: env.logger,
+        config: env.config,
+        database: env.database,
+        reader: env.reader,
+    });
 ```
 
-The Azure repository actions use an [Azure PAT (personal access
-token)](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate)
-for authorization. The PAT requires `Read` permission for `Code` for the
-`azure:repo:clone` action. For the `azure:repo:push` action the PAT requires
-`Read & write` permission for `Code`. Simply add the PAT to your
+The GitLab repository actions use PAT(Personal Access Token). Simply add the PAT to your
 `app-config.yaml`:
 
 ```yaml
 # app-config.yaml
 
 integrations:
-  azure:
-    - host: dev.azure.com
+  gitlab:
+    - host: gitlab.com
       credentials:
-        - personalAccessToken: ${AZURE_TOKEN}
+        - personalAccessToken: ${GITLAB_ACCESS_TOKEN}
 ```
 
 Read more on integrations in Backstage in the [Integrations
@@ -102,7 +99,7 @@ documentation](https://backstage.io/docs/integrations/).
 
 ## Using the template
 
-After loading and configuring the Azure repository template actions, you can use
+After loading and configuring the GitLab repository template actions, you can use
 the actions in your template:
 
 ```yaml
@@ -111,11 +108,11 @@ the actions in your template:
 apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
-  name: azure-repo-demo
-  title: Azure Repository Test
-  description: Clone and push to an Azure repository example.
+  name: Gitlab-repo-demo
+  title: GitLab Repository Test
+  description: Clone and push to an Gitlab repository example.
 spec:
-  owner: parfuemerie-douglas
+  owner: Raisa Hossain
   type: service
 
   parameters:
@@ -140,11 +137,11 @@ spec:
               - Group
 
   steps:
-    - id: cloneAzureRepo
-      name: Clone Azure Repo
-      action: azure:repo:clone
+    - id: cloneGitlabRepo
+      name: Clone Gitlab Repo
+      action: gitlab:repo:clone
       input:
-        remoteUrl: "https://<MY_AZURE_ORGANIZATION>@dev.azure.com/<MY_AZURE_ORGANIZATION>/<MY_AZURE_PROJECT>/_git/<MY_AZURE_REPOSITORY>"
+        remoteUrl: "https://<MY_GITLAB_ORGANIZATION>@gitlab.com/<MY_GITLAB_ORGANIZATION>/<MY_GITLAB_PROJECT>/_git/<MY_GITLAB_REPOSITORY>"
         branch: "main"
         targetPath: ./sub-directory
 
@@ -158,47 +155,47 @@ spec:
           name: ${{ parameters.name }}
           owner: ${{ parameters.owner }}
 
-    - id: pushAzureRepo
-      name: Push to Remote Azure Repo
-      action: azure:repo:push
+    - id: pushGitlabRepo
+      name: Push to Remote Gitlab Repo
+      action: gitlab:repo:push
       input:
-        branch: <MY_AZURE_REPOSITORY_BRANCH>
+        branch: <MY_GITLAB_REPOSITORY_BRANCH>
         sourcePath: ./sub-directory
         gitCommitMessage: Add ${{ parameters.name }} project files
 
-    - id: pullRequestAzureRepo
-      name: Create a Pull Request to Azure Repo
-      action: azure:repo:pr
+    - id: pullRequestGitlabRepo
+      name: Create a Pull Request to Gitlab Repo
+      action: gitlab:repo:pr
       input:
-        sourceBranch: <MY_AZURE_REPOSITORY_BRANCH>
+        sourceBranch: <MY_GITLAB_REPOSITORY_BRANCH>
         targetBranch: "main"
-        repoId: <MY_AZURE_REPOSITORY>
+        repoId: <MY_Gitlab_REPOSITORY>
         title: ${{ parameters.name }}
-        project: <MY_AZURE_PROJECT>
+        project: <MY_Gitlab_PROJECT>
         supportsIterations: false
 
     - id: register
       name: Register
       action: catalog:register
       input:
-        repoContentsUrl: "dev.azure.com?owner=<MY_AZURE_PROJECT>&repo=<MY_AZURE_REPOSITORY>&organization=<MY_AZURE_ORGANIZATION>&version=<MY_AZURE_REPOSITORY_BRANCH>"
+        repoContentsUrl: "gitlab.com?owner=<MY_GITLAB_PROJECT>&repo=<MY_GITLAB_REPOSITORY>&organization=<MY_GITLAB_ORGANIZATION>&version=<MY_GITLAB_REPOSITORY_BRANCH>"
         catalogInfoPath: "/catalog-info.yaml"
 
   output:
     links:
       - title: Repository
-        url: "dev.azure.com?owner=<MY_AZURE_PROJECT>&repo=<MY_AZURE_REPOSITORY>&organization=<MY_AZURE_ORGANIZATION>"
+        url: "gitlab.com?owner=<MY_GITLAB_PROJECT>&repo=<MY_GITLAB_REPOSITORY>&organization=<MY_GITLAB_ORGANIZATION>"
       - title: Open in catalog
         icon: catalog
         entityRef: ${{ steps.register.output.entityRef }}
 ```
 
-Replace `<MY_AZURE_ORGANIZATION>` with the name of your Azure DevOps
-organization, `<MY_AZURE_PROJECT>` with the name of your Azure DevOps project,
-`<MY_AZURE_REPOSITORY_BRANCH` with the name of the desired Azure DevOps repository branch,
-and `<MY_AZURE_REPOSITORY>` with the name of your Azure DevOps repository.
+Replace `<MY_GITLAB_ORGANIZATION>` with the name of your Gitlab DevOps
+organization, `<MY_GITLAB_PROJECT>` with the name of your Gitlab DevOps project,
+`<MY_GITLAB_REPOSITORY_BRANCH` with the name of the desired Gitlab DevOps repository branch,
+and `<MY_GITLAB_REPOSITORY>` with the name of your Gitlab DevOps repository.
 
 NOTE: You will not be able to register the Pull Request since the file will not exist from the main branch!
 
-You can find a list of all registred actions including their parameters at the
+You can find a list of all registered actions including their parameters at the
 `/create/actions` route in your Backstage application.

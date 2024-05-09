@@ -1,25 +1,7 @@
-/*
- * Copyright 2022 Parfümerie Douglas GmbH
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 import { Git } from "@backstage/backend-common";
 import { Logger } from "winston";
-import * as azdev from "azure-devops-node-api";
-import * as GitApi from "azure-devops-node-api/GitApi";
-import * as GitInterfaces from "azure-devops-node-api/interfaces/GitInterfaces";
-import { AzureDevOpsCredentialsProvider } from "@backstage/integration";
-import { InputError } from "@backstage/errors";
+import {GitlabCredentialsProvider} from "@backstage/integration";
+import {CreateProjectOptions, Gitlab} from "@gitbeaker/core";
 
 export async function cloneRepo({
   dir,
@@ -60,7 +42,6 @@ export async function cloneRepo({
 
 export async function commitAndPushBranch({
   dir,
-  credentialsProvider,
   logger,
   remote = 'origin',
   commitMessage,
@@ -68,7 +49,7 @@ export async function commitAndPushBranch({
   branch = 'scaffolder',
 }: {
   dir: string;
-  credentialsProvider: AzureDevOpsCredentialsProvider;
+  credentialsProvider: GitlabCredentialsProvider;
   logger: Logger;
   remote?: string;
   commitMessage: string;
@@ -81,50 +62,8 @@ export async function commitAndPushBranch({
   };
 
   const git = Git.fromAuth({
-    onAuth: async url => {
-      const credentials = await credentialsProvider.getCredentials({ url });
-
-      logger.info(`Using ${credentials?.type} credentials for ${url}`);
-
-      if (credentials?.type === 'pat') {
-        return { username: "not-empty", password: credentials.token };
-      } else if (credentials?.type === 'bearer') {
-        return {
-          headers: {
-            Authorization: `Bearer ${credentials.token}`,
-          },
-        };
-      }
-
-      throw new InputError(`No token credentials provided for ${url}`);
-    },
     logger,
   });
-
-  const currentBranch = await git.currentBranch({ dir });
-
-  logger.info(`Current branch is ${currentBranch}`);
-  logger.info(`Target branch is ${branch}`);
-
-  if (currentBranch !== branch) {
-    try {
-      await git.branch({
-        dir,
-        ref: branch,
-      });
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === "AlreadyExistsError") {
-        // we safely ignore this error
-      } else {
-        throw err;
-      }
-    }
-
-    await git.checkout({
-      dir,
-      ref: branch,
-    });
-  }
 
   await git.add({
     dir,
@@ -145,57 +84,83 @@ export async function commitAndPushBranch({
   });
 }
 
-export async function createADOPullRequest({
-  gitPullRequestToCreate,
-  server,
-  auth,
-  repoId,
-  project,
-  supportsIterations,
+export async function createGitLabMergeRequest({
+  gitlab,projectId,sourceBranch,targetBranch,title,description,
 }:{
-  gitPullRequestToCreate: GitInterfaces.GitPullRequest;
-  server: string;
-  auth: { org: string; token: string };
-  repoId: string;
-  project?: string;
-  supportsIterations?: boolean;
-}): Promise<GitInterfaces.GitPullRequest> {
-  const url = `https://${server}/`;
-  const orgUrl = url + auth.org;
-  const token: string = auth.token || ""; // process.env.AZURE_TOKEN || "";
-
-  const authHandler = azdev.getHandlerFromToken(token);
-  const connection = new azdev.WebApi(orgUrl, authHandler);
-
-  const gitApiObject: GitApi.IGitApi = await connection.getGitApi();
-
-  const pr = await gitApiObject.createPullRequest( gitPullRequestToCreate, repoId, project, supportsIterations );
-  return pr;
+  gitlab: Gitlab;
+  projectId: string | number;
+  sourceBranch: string;
+  targetBranch: string;
+  title: string;
+  description?: string;
+}): Promise<any> {
+  const mergeRequest = {
+    sourceBranch,
+    targetBranch,
+    title,
+    description,
+  };
+  const mr = await gitlab.MergeRequests.create(projectId, mergeRequest);
+  return mr.data;
 }
 
-export async function updateADOPullRequest({
-  gitPullRequestToUpdate,
-  server,
-  auth,
-  repoId,
-  project,
-  pullRequestId,
+export async function updateGitLabMergeRequest({
+    gitlab, projectId, mergeRequestId, title, description,
 }:{
-  gitPullRequestToUpdate: GitInterfaces.GitPullRequest;
-  server: string;
-  auth: { org: string; token: string };
-  repoId: string;
-  project?: string;
-  pullRequestId: number;
+  gitlab: Gitlab;
+  projectId: string | number;
+  mergeRequestId: number;
+  title?: string;
+  description?: string;
 }): Promise<void> {
-  const url = `https://${server}/`;
-  const orgUrl = url + auth.org;
-  const token: string = auth.token || ""; // process.env.AZURE_TOKEN || "";
+  const updateOptions = {
+    id: projectId,
+    merge_request_id: mergeRequestId,
+    title: title,
+    description: description,
+  };
 
-  const authHandler = azdev.getHandlerFromToken(token);
-  const connection = new azdev.WebApi(orgUrl, authHandler);
+  await gitlab.MergeRequests.edit(projectId, mergeRequestId, updateOptions);
+}
 
-  const gitApiObject: GitApi.IGitApi = await connection.getGitApi();
+export async function createGitLabProject(
+    gitlab: Gitlab,
+    projectName: string,
+    options?: CreateProjectOptions
+): Promise<any>{
+  try {
+    const project = await gitlab.Projects.create({
+      name: projectName,
+      ...options,
+    });
+    return project.data;
+  } catch (error) {
+    console.error("Error creating GitLab project:", error);
+    return undefined;
+  }
+}
 
-  await gitApiObject.updatePullRequest(gitPullRequestToUpdate, repoId, pullRequestId, project);
+export async function getGitLabRepository(
+    gitlab: Gitlab,
+    projectId: string | number
+): Promise<any> {
+  try{
+    const repository = await gitlab.Projects.show(projectId);
+    return repository.data;
+  } catch (error) {
+    console.error("Error fetching repository:", error);
+    throw error;
+  }
+
+
+}
+
+export async function createGitLabBranch(
+    gitlab: Gitlab,
+    projectId: string | number,
+    branchName: string,
+    ref: string
+): Promise<any> {
+  const branch = await gitlab.Branches.create(projectId, branchName, ref);
+  return branch.data;
 }

@@ -1,27 +1,21 @@
-/*
- * Copyright 2022 Parfümerie Douglas GmbH
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 import { resolveSafeChildPath } from "@backstage/backend-common";
 import { InputError } from "@backstage/errors";
-import { DefaultAzureDevOpsCredentialsProvider, ScmIntegrationRegistry } from "@backstage/integration";
+import { DefaultGitlabCredentialsProvider, ScmIntegrationRegistry } from "@backstage/integration";
 import { createTemplateAction } from "@backstage/plugin-scaffolder-backend";
 
 import { cloneRepo } from "../helpers";
 
-export const cloneAzureRepoAction = (options: {
+/**
+ * Creates a 'gitlab:repo:clone' Scaffolder action.
+ *
+ * @remarks
+ *
+ *This Scaffolder action will clone a GitLab repository into the workspace directory.
+ *
+ * @public
+ * @param options
+ */
+export const cloneGitLabRepoAction = (options: {
   integrations: ScmIntegrationRegistry;
 }) => {
   const { integrations } = options;
@@ -33,8 +27,8 @@ export const cloneAzureRepoAction = (options: {
     server: string;
     token?: string;
   }>({
-    id: "azure:repo:clone",
-    description: "Clone an Azure repository into the workspace directory.",
+    id: "gitlab:repo:clone",
+    description: "Clone a Gitlab repository into the workspace directory.",
     schema: {
       input: {
         required: ["remoteUrl"],
@@ -59,10 +53,10 @@ export const cloneAzureRepoAction = (options: {
           server: {
             type: "string",
             title: "Server hostname",
-            description: "The hostname of the Azure DevOps service. Defaults to dev.azure.com",
+            description: "The hostname of the Gitlab service.",
           },
           token: {
-            title: "Authenticatino Token",
+            title: "Authentication Token",
             type: "string",
             description: "The token to use for authorization.",
           },
@@ -75,20 +69,18 @@ export const cloneAzureRepoAction = (options: {
       const targetPath = ctx.input.targetPath ?? "./";
       const outputDir = resolveSafeChildPath(ctx.workspacePath, targetPath);
 
-      const provider =
-        DefaultAzureDevOpsCredentialsProvider.fromIntegrations(integrations);
+      const provider = DefaultGitlabCredentialsProvider.fromIntegrations(integrations);
       const credentials = await provider.getCredentials({ url: remoteUrl });
 
-      let auth: { username: string; password: string } | { token: string };
+      let auth: { token: string };
+
       if (ctx.input.token) {
-        auth = { username: "not-empty", password: ctx.input.token };
-      } else if (credentials?.type === "pat") {
-        auth = { username: "not-empty", password: credentials.token };
-      } else if (credentials?.type === "bearer") {
+        auth = { token: ctx.input.token };
+      } else if (credentials?.token) {
         auth = { token: credentials.token };
       } else {
         throw new InputError(
-          `No token credentials provided for Azure repository ${remoteUrl}`,
+            `No token credentials provided for GitLab repository ${remoteUrl}`,
         );
       }
 

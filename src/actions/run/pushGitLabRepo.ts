@@ -15,13 +15,24 @@
  */
 
 import { Config } from "@backstage/config";
-import { DefaultAzureDevOpsCredentialsProvider, ScmIntegrationRegistry } from "@backstage/integration";
+import { DefaultGitlabCredentialsProvider, ScmIntegrationRegistry } from "@backstage/integration";
 import { createTemplateAction } from "@backstage/plugin-scaffolder-backend";
 
 import { commitAndPushBranch } from "../helpers";
 import { getRepoSourceDirectory } from "../util";
 
-export const pushAzureRepoAction = (options: {
+/**
+ * Creates a 'gitlab:repo:push' Scaffolder action.
+ *
+ * @remarks
+ *
+ * This Scaffolder action will push the content in the workspace to a remote GitLab repository.
+ *
+ *@public
+ *
+ * @param options
+ */
+export const pushGitLabRepoAction = (options: {
   integrations: ScmIntegrationRegistry;
   config: Config;
 }) => {
@@ -36,7 +47,7 @@ export const pushAzureRepoAction = (options: {
     server: string;
     token?: string;
   }>({
-    id: "azure:repo:push",
+    id: "gitlab:repo:push",
     description:
       "Push the content in the workspace to a remote Azure repository.",
     schema: {
@@ -95,7 +106,7 @@ export const pushAzureRepoAction = (options: {
 
       await commitAndPushBranch({
         dir: sourcePath,
-        credentialsProvider: DefaultAzureDevOpsCredentialsProvider.fromIntegrations(integrations),
+        credentialsProvider: DefaultGitlabCredentialsProvider.fromIntegrations(integrations),
         logger: ctx.logger,
         commitMessage: gitCommitMessage
           ? gitCommitMessage
