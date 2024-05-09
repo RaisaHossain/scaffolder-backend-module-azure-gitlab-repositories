@@ -24,7 +24,6 @@ You need to configure the actions in your backend:
 
 ```sh
 # From your Backstage root directory
-yarn add --cwd packages/backend @parfuemerie-douglas/scaffolder-backend-module-Gitlab-repositories
 ```
 
 Configure the actions (you can check the
@@ -79,6 +78,7 @@ export default async function createPlugin(
         database: env.database,
         reader: env.reader,
     });
+}
 ```
 
 The GitLab repository actions use PAT(Personal Access Token). Simply add the PAT to your
